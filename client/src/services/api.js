@@ -159,7 +159,7 @@ export const settingsService = {
   getUsage: () => api.get('/settings/usage'),
   getPlans: () => api.get('/settings/plans'),
   upgradePlan: (targetPlan, months = 1) => api.post('/settings/upgrade', { targetPlan, months }),
-  confirmUpgrade: (orderCode) => api.post('/settings/upgrade/confirm', { orderCode }),
+  confirmUpgrade: (orderCode, targetPlan, months) => api.post('/settings/upgrade/confirm', { orderCode, targetPlan, months }),
   cancelPlan: () => api.post('/settings/cancel'),
 };
 

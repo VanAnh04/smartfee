@@ -277,6 +277,9 @@ export default function FamilyFees() {
               ? 'Hệ thống sẽ tự động cập nhật trạng thái khi nhận được tiền'
               : 'Sau khi chuyển khoản, vui lòng upload ảnh biên lai để chúng tôi xác nhận nhanh nhất có thể!'}
           </p>
+          <p className={`text-xs mt-2 ${isGoldOrPremium ? 'text-green-600' : 'text-amber-600'}`}>
+            💡 Đây là học phí thanh toán cho <strong>{organization?.name || 'Trung tâm'}</strong>
+          </p>
         </div>
       </div>
 
@@ -579,7 +582,10 @@ export default function FamilyFees() {
 
                       {qrData.qrConfig && (
                         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
-                          <p className="font-medium text-blue-800">Thông tin chuyển khoản:</p>
+                          <p className="font-medium text-blue-800 flex items-center gap-2">
+                            <Building2 size={16} />
+                            Thông tin chuyển khoản cho {organization?.name || 'Trung tâm'}:
+                          </p>
                           {qrData.qrConfig.bankName && (
                             <div className="flex justify-between text-sm">
                               <span className="text-blue-700">Ngân hàng:</span>

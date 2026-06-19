@@ -194,8 +194,28 @@ export default function Settings() {
       toast.success('Thanh toán thành công! Đang xác nhận nâng cấp...');
       console.log('Calling confirm API with orderCode:', orderCode);
 
+      // Lấy thông tin plan đã lưu trước khi redirect
+      const savedPlanData = localStorage.getItem('pendingUpgrade');
+      let planData = {};
+      if (savedPlanData) {
+        try {
+          planData = JSON.parse(savedPlanData);
+          // Kiểm tra timeout - 30 phút
+          if (Date.now() - planData.timestamp > 30 * 60 * 1000) {
+            console.warn('Pending upgrade data expired');
+            localStorage.removeItem('pendingUpgrade');
+            toast.error('Phiên nâng cấp đã hết hạn. Vui lòng thử lại.');
+            window.history.replaceState({}, '', '/settings');
+            return;
+          }
+          localStorage.removeItem('pendingUpgrade');
+        } catch (e) {
+          console.error('Error parsing saved plan data:', e);
+        }
+      }
+
       // Gọi API confirm để xác nhận nâng cấp
-      settingsService.confirmUpgrade(orderCode)
+      settingsService.confirmUpgrade(orderCode, planData.targetPlan, planData.months)
         .then(res => {
           console.log('Confirm success:', res.data);
           toast.success('Nâng cấp gói dịch vụ thành công!');
@@ -213,6 +233,7 @@ export default function Settings() {
         });
     } else if (paymentStatus === 'cancelled') {
       toast.info('Đã hủy thanh toán');
+      localStorage.removeItem('pendingUpgrade');
       window.history.replaceState({}, '', '/settings');
     }
   }, []);
@@ -427,6 +448,13 @@ export default function Settings() {
       const res = await settingsService.upgradePlan(selectedPlan, upgradeMonths);
 
       if (res.data.paymentUrl) {
+        // Lưu thông tin plan trước khi redirect
+        localStorage.setItem('pendingUpgrade', JSON.stringify({
+          targetPlan: selectedPlan,
+          months: upgradeMonths,
+          timestamp: Date.now()
+        }));
+        
         // Có URL thanh toán PayOS - redirect đến trang thanh toán
         toast.success('Đang chuyển đến trang thanh toán PayOS...');
         setShowUpgradeModal(false);
@@ -676,7 +704,23 @@ export default function Settings() {
           {/* Plan Settings */}
           {activeTab === 'plan' && (
             <div>
-              {/* Current Plan Card */}
+              {/* Notice Banner */}
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-5 mb-6">
+                <div className="flex items-start gap-3">
+                  <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <CreditCard size={24} className="text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-purple-900">Thanh toán phí gói dịch vụ SmartFee</h2>
+                    <p className="text-sm text-purple-700 mt-1">
+                      Đây là phí sử dụng dịch vụ SmartFee cho trung tâm của bạn.
+                      <br />
+                      <span className="font-medium">Phí này tách biệt với học phí mà phụ huynh/học sinh thanh toán cho trung tâm.</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
               <h2 className="text-lg font-semibold mb-4">Gói dịch vụ hiện tại</h2>
               
               <div className={`p-6 rounded-xl border-2 mb-6 ${PLANS[currentPlan]?.borderClass || 'border-gray-300'}`}>
@@ -887,20 +931,35 @@ export default function Settings() {
           {activeTab === 'qr' && (
             <div className="max-w-3xl">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold">Cấu hình QR thanh toán & PayOS</h2>
+                <h2 className="text-lg font-semibold">Cấu hình nhận tiền học phí</h2>
                 <span className="text-sm text-gray-500">
                   Gói hiện tại: <span className="font-semibold capitalize">{currentPlan}</span>
                 </span>
+              </div>
+
+              {/* Notice Banner */}
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <Building size={20} className="text-green-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-green-900">Nhận tiền học phí từ phụ huynh</p>
+                    <p className="text-sm text-green-700 mt-1">
+                      Cấu hình này dùng để <span className="font-semibold">nhận tiền học phí từ phụ huynh/học sinh</span> vào tài khoản của trung tâm.
+                      <br />
+                      <span className="text-xs">Lưu ý: Đây là thông tin TK ngân hàng của TRUNG TÂM, không phải SmartFee.</span>
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <form onSubmit={handleSaveQrConfig} className="space-y-6">
                 <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
                   <div className="flex items-center gap-2 mb-2">
                     <QrCode size={18} className="text-primary-600" />
-                    <h3 className="font-semibold text-gray-900">QR thanh toán cơ bản (Basic/Gold)</h3>
+                    <h3 className="font-semibold text-gray-900">Thông tin tài khoản ngân hàng</h3>
                   </div>
                   <p className="text-sm text-gray-500 mb-4">
-                    Dùng cho gói Basic và Gold. Khách hàng quét mã QR để chuyển khoản thủ công.
+                    Phụ huynh/học sinh sẽ chuyển tiền vào tài khoản này khi thanh toán học phí.
                   </p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -960,11 +1019,17 @@ export default function Settings() {
                 <div className="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
                   <div className="flex items-center gap-2 mb-2">
                     <CreditCardIcon size={18} className="text-green-600" />
-                    <h3 className="font-semibold text-gray-900">PayOS (Gold/Premium)</h3>
+                    <h3 className="font-semibold text-gray-900">PayOS của Trung tâm (Gold/Premium)</h3>
                   </div>
                   <p className="text-sm text-gray-500 mb-4">
-                    Kích hoạt thanh toán tự động. Khách hàng sẽ được chuyển đến trang PayOS của trung tâm.
+                    Kích hoạt thanh toán tự động qua PayOS. Khách hàng sẽ được chuyển đến trang PayOS để thanh toán học phí vào tài khoản của trung tâm.
                   </p>
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    <p className="text-sm text-amber-800">
+                      <AlertCircle size={16} className="inline mr-1" />
+                      Đây là PayOS của TRUNG TÂM để nhận tiền từ phụ huynh. Thông tin này tách biệt với PayOS của SmartFee (.env).
+                    </p>
+                  </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
@@ -1329,8 +1394,8 @@ export default function Settings() {
           <div className="bg-white rounded-xl w-full max-w-lg">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 className="text-lg font-semibold flex items-center gap-2">
-                <ArrowUp className="text-primary-600" size={20} />
-                Nâng cấp lên {PLANS[selectedPlan].name}
+                <ArrowUp className="text-purple-600" size={20} />
+                Nâng cấp gói dịch vụ SmartFee
               </h2>
               <button onClick={() => setShowUpgradeModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
                 <X size={20} />
@@ -1338,13 +1403,27 @@ export default function Settings() {
             </div>
             
             <div className="p-6 space-y-4">
+              {/* Notice - Phân biệt rõ */}
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <CreditCard size={20} className="text-purple-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-purple-900">Phí gói dịch vụ SmartFee</p>
+                    <p className="text-sm text-purple-700 mt-1">
+                      Đây là <span className="font-semibold">phí sử dụng dịch vụ SmartFee</span> cho trung tâm của bạn. 
+                      Phí này <span className="font-semibold">tách biệt với học phí</span> mà phụ huynh/học sinh thanh toán cho trung tâm.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Plan Summary */}
               <div className={`p-4 rounded-xl border-2 ${PLANS[selectedPlan].borderClass} flex items-center gap-4`}>
                 <div className={`w-12 h-12 rounded-lg ${PLANS[selectedPlan].colorClass} flex items-center justify-center text-2xl`}>
                   {PLANS[selectedPlan].icon}
                 </div>
                 <div>
-                  <h3 className="font-semibold">{PLANS[selectedPlan].name}</h3>
+                  <h3 className="font-semibold">Gói {PLANS[selectedPlan].name}</h3>
                   <p className="text-lg font-bold">{PLANS[selectedPlan].priceDisplay}/tháng</p>
                 </div>
               </div>
@@ -1359,7 +1438,7 @@ export default function Settings() {
                       onClick={() => setUpgradeMonths(months)}
                       className={`py-3 px-4 rounded-lg border-2 transition-all ${
                         upgradeMonths === months 
-                          ? 'border-primary-500 bg-primary-50 text-primary-700' 
+                          ? 'border-purple-500 bg-purple-50 text-purple-700' 
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
                     >
@@ -1378,7 +1457,7 @@ export default function Settings() {
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Tổng tiền</span>
-                  <span className="text-2xl font-bold text-primary-600">
+                  <span className="text-2xl font-bold text-purple-600">
                     {formatCurrency(PLANS[selectedPlan].price * upgradeMonths * (upgradeMonths === 3 ? 0.95 : upgradeMonths === 6 ? 0.9 : 1))}
                   </span>
                 </div>
@@ -1409,7 +1488,7 @@ export default function Settings() {
               <button
                 onClick={handleUpgrade}
                 disabled={upgrading}
-                className="px-6 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2 disabled:opacity-50"
+                className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center gap-2 disabled:opacity-50"
               >
                 {upgrading ? (
                   <>
@@ -1419,7 +1498,7 @@ export default function Settings() {
                 ) : (
                   <>
                     <ArrowUp size={16} />
-                    Xác nhận nâng cấp
+                    Thanh toán qua PayOS
                   </>
                 )}
               </button>

@@ -6,6 +6,7 @@ class PayOSService {
     this.config = null;
   }
 
+  // Khởi tạo PayOS với config cụ thể
   initialize(config = {}) {
     const { clientId, apiKey, checksumKey } = config;
 
@@ -18,17 +19,35 @@ class PayOSService {
     return true;
   }
 
-  getClient(organization) {
-    const config = organization?.payosConfig || {};
+  // Lấy PayOS của SmartFee (từ .env) - Dùng để trung tâm thanh toán phí gói dịch vụ cho SmartFee
+  getSmartFeeClient() {
     this.initialize({
-      clientId: config.clientId || process.env.PAYOS_CLIENT_ID,
-      apiKey: config.apiKey || process.env.PAYOS_API_KEY,
-      checksumKey: config.checksumKey || process.env.PAYOS_CHECKSUM_KEY
+      clientId: process.env.PAYOS_CLIENT_ID,
+      apiKey: process.env.PAYOS_API_KEY,
+      checksumKey: process.env.PAYOS_CHECKSUM_KEY
     });
     return this.payos;
   }
 
+  // Lấy PayOS của Trung tâm (từ organization) - Dùng để phụ huynh thanh toán học phí cho trung tâm
+  getOrganizationClient(organization) {
+    const config = organization?.payosConfig || {};
+    
+    if (!config.clientId || !config.apiKey || !config.checksumKey) {
+      throw new Error('Trung tâm chưa cấu hình PayOS');
+    }
+    
+    this.initialize({
+      clientId: config.clientId,
+      apiKey: config.apiKey,
+      checksumKey: config.checksumKey
+    });
+    return this.payos;
+  }
+
+  // Tạo payment link - phân biệt theo loại
   async createPaymentLink({
+    type = 'organization', // 'smartfee' hoặc 'organization'
     organization,
     amount,
     orderCode,
@@ -39,13 +58,21 @@ class PayOSService {
     buyerEmail,
     buyerPhone
   }) {
-    const payos = this.getClient(organization);
+    let payos;
+    
+    if (type === 'smartfee') {
+      // PayOS của SmartFee - thanh toán phí gói dịch vụ
+      payos = this.getSmartFeeClient();
+    } else {
+      // PayOS của Trung tâm - thanh toán học phí
+      payos = this.getOrganizationClient(organization);
+    }
 
     const paymentData = {
       orderCode: Number(orderCode),
       amount: Number(amount),
       description: description || `Thanh toan hoc phi - ${orderCode}`,
-      returnUrl: returnUrl || `${process.env.FRONTEND_URL}/payment/result?orderCode=${orderCode}`,
+      returnUrl: returnUrl || `${process.env.FRONTEND_URL}/payment/result?orderCode=${orderCode}&type=${type}`,
       cancelUrl: cancelUrl || `${process.env.FRONTEND_URL}/payment/cancel?orderCode=${orderCode}`,
       buyerName: buyerName || '',
       buyerEmail: buyerEmail || '',
@@ -58,7 +85,8 @@ class PayOSService {
         success: true,
         paymentUrl: paymentLink.checkoutUrl,
         orderCode: Number(orderCode),
-        amount: Number(amount)
+        amount: Number(amount),
+        type: type
       };
     } catch (error) {
       console.error('PayOS create payment error:', error);
@@ -83,13 +111,30 @@ class PayOSService {
     }
   }
 
-  async getPaymentStatus(orderCode) {
-    if (!this.payos || !this.config) {
-      throw new Error('PayOS chưa được cấu hình');
-    }
-
+  // Lấy trạng thái thanh toán - cần biết loại để dùng config đúng
+  async getPaymentStatus(orderCode, type = 'organization') {
     try {
-      const paymentDetail = await this.payos.paymentRequests.get(orderCode);
+      let payos;
+      
+      if (type === 'smartfee') {
+        payos = this.getSmartFeeClient();
+      } else {
+        // Cần truyền organization khi kiểm tra thanh toán của trung tâm
+        throw new Error('Cần organization để kiểm tra thanh toán của trung tâm');
+      }
+      
+      const paymentDetail = await payos.paymentRequests.get(parseInt(orderCode));
+      return paymentDetail;
+    } catch (error) {
+      throw new Error('Không thể lấy thông tin thanh toán: ' + error.message);
+    }
+  }
+
+  // Kiểm tra thanh toán của trung tâm (phụ huynh trả học phí)
+  async getOrganizationPaymentStatus(organization, orderCode) {
+    try {
+      const payos = this.getOrganizationClient(organization);
+      const paymentDetail = await payos.paymentRequests.get(parseInt(orderCode));
       return paymentDetail;
     } catch (error) {
       throw new Error('Không thể lấy thông tin thanh toán: ' + error.message);

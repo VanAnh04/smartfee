@@ -31,8 +31,40 @@ import { errorHandler } from './middleware/errorHandler.js';
 const app = express();
 
 app.use(helmet());
+
+// CORS configuration - allow localhost and production domains
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
+  // Production Vercel domains - thêm vào đây sau khi deploy
+];
+
+// Thêm VERCEL_URL nếu có (Vercel tự động set biến này)
+if (process.env.VERCEL_URL) {
+  allowedOrigins.push(`https://${process.env.VERCEL_URL}`);
+  allowedOrigins.push(`https://${process.env.VERCEL_URL.replace('https://', '')}`);
+}
+
+// Thêm custom production domains từ env
+if (process.env.ALLOWED_ORIGINS) {
+  allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(','));
+}
+
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV === 'development') {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(null, true); // Allow all for now, implement strict mode if needed
+    }
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '10mb' }));

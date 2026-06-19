@@ -80,15 +80,17 @@ router.post('/upgrade', requireAdmin, async (req, res, next) => {
       });
     }
 
-    const payosService = (await import('../services/payos.service.js')).default;
-
-    if (!organization.payosConfig?.clientId) {
+    // Kiểm tra PayOS của SmartFee có được cấu hình không
+    if (!process.env.PAYOS_CLIENT_ID || !process.env.PAYOS_API_KEY || !process.env.PAYOS_CHECKSUM_KEY) {
       return res.status(400).json({
-        error: 'Chưa cấu hình PayOS cho trung tâm. Vui lòng nhập Client ID, API Key và Checksum Key trong phần Cài đặt.'
+        error: 'Hệ thống SmartFee chưa được cấu hình thanh toán. Vui lòng liên hệ quản trị viên.'
       });
     }
 
+    const payosService = (await import('../services/payos.service.js')).default;
+
     const paymentResult = await payosService.createPaymentLink({
+      type: 'smartfee', // PayOS của SmartFee - trung tâm trả phí gói dịch vụ
       organization,
       amount: planInfo.price * months,
       orderCode: Math.floor(Date.now() / 1000),
@@ -166,13 +168,20 @@ router.post('/upgrade/confirm', requireAdmin, async (req, res, next) => {
     const { orderCode } = req.body;
     console.log('Confirm upgrade request:', { orderCode, organizationId: req.organizationId });
 
-    const payosService = (await import('../services/payos.service.js')).default;
+    const organization = await Organization.findById(req.organizationId);
+    console.log('Organization found:', { name: organization.name, plan: organization.plan });
 
-    if (!payosService.config) {
-      return res.status(400).json({ error: 'PayOS chưa được cấu hình cho trung tâm' });
+    // Kiểm tra PayOS SmartFee có được cấu hình không
+    if (!process.env.PAYOS_CLIENT_ID || !process.env.PAYOS_API_KEY || !process.env.PAYOS_CHECKSUM_KEY) {
+      return res.status(400).json({ 
+        error: 'Hệ thống SmartFee chưa được cấu hình thanh toán.' 
+      });
     }
 
-    const paymentDetail = await payosService.getPaymentStatus(parseInt(orderCode));
+    const payosService = (await import('../services/payos.service.js')).default;
+    
+    // Kiểm tra thanh toán với PayOS SmartFee
+    const paymentDetail = await payosService.getPaymentStatus(parseInt(orderCode), 'smartfee');
     console.log('Payment detail from PayOS:', paymentDetail);
 
     if (paymentDetail.status !== 'PAID') {
@@ -181,9 +190,6 @@ router.post('/upgrade/confirm', requireAdmin, async (req, res, next) => {
         status: paymentDetail.status
       });
     }
-
-    const organization = await Organization.findById(req.organizationId);
-    console.log('Organization before upgrade:', { name: organization.name, plan: organization.plan });
 
     const targetPlan = req.body.targetPlan;
     if (!targetPlan || !Object.values(PLANS).includes(targetPlan)) {
