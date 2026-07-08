@@ -380,7 +380,7 @@ export default function Login() {
 
               {/* Google Login Button - Admin/Family only */}
               {(loginType === 'admin' || loginType === 'family') && (
-                <div className={`transition-all duration-300 ${isFormVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`} style={{ transitionDelay: '100ms' }}>
+                <div className={`flex justify-center transition-all duration-300 ${isFormVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`} style={{ transitionDelay: '100ms' }}>
                   <GoogleLogin
                     onSuccess={async (credentialResponse) => {
                       setLoading(true);
@@ -402,7 +402,7 @@ export default function Login() {
                     size="large"
                     text="signin_with"
                     shape="rectangular"
-                    width="100%"
+                    width="340"
                   />
                 </div>
               )}
