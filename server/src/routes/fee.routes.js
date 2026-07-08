@@ -5,10 +5,47 @@ import Student from '../models/Student.js';
 import Payment from '../models/Payment.js';
 import Class from '../models/Class.js';
 import Organization from '../models/Organization.js';
+import Attendance from '../models/Attendance.js';
 import { auth, requireAdminOrStaff } from '../middleware/auth.js';
 import notificationService from '../services/notification.service.js';
+import { sendFeeReminderEmail } from '../utils/emailService.js';
 
 const router = express.Router();
+
+// POST /cron/check-overdue - Public endpoint with CRON_SECRET verification
+router.post('/cron/check-overdue', async (req, res, next) => {
+  try {
+    const secret = req.headers['x-cron-secret'] || req.query.secret;
+    const cronSecret = process.env.CRON_SECRET || 'smartfee_cron_default_secret';
+    
+    if (secret !== cronSecret) {
+      return res.status(401).json({ error: 'Không có quyền truy cập tác vụ cron' });
+    }
+
+    const today = new Date();
+    
+    // Find all fees that are unpaid or partial AND whose dueDate has passed (dueDate < today)
+    const overdueFees = await Fee.find({
+      dueDate: { $lt: today },
+      status: { $in: ['unpaid', 'partial'] }
+    });
+
+    let updatedCount = 0;
+    for (const fee of overdueFees) {
+      fee.status = 'overdue';
+      await fee.save();
+      updatedCount++;
+    }
+
+    res.json({
+      success: true,
+      message: `Đã quét và cập nhật ${updatedCount} phiếu học phí quá hạn`,
+      updatedCount
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.use(auth);
 
@@ -181,15 +218,36 @@ router.post('/generate', requireAdminOrStaff, async (req, res, next) => {
       return res.status(404).json({ error: 'Không tìm thấy kỳ thu' });
     }
 
-    // Lấy danh sách class để lấy feeAmount
+    // Lấy danh sách class để lấy feeAmount và billingType
     let classMap = {};
     if (classId) {
       const cls = await Class.findById(classId);
-      if (cls) classMap[classId] = cls.feeAmount || 0;
+      if (cls) classMap[classId] = cls;
     } else {
       const classes = await Class.find({ organizationId: req.organizationId, status: 'active' });
-      classes.forEach(c => { classMap[c._id.toString()] = c.feeAmount || 0; });
+      classes.forEach(c => { classMap[c._id.toString()] = c; });
     }
+
+    // Tìm tất cả điểm danh trong kỳ thu
+    const attendanceRecords = await Attendance.find({
+      organizationId: req.organizationId,
+      date: { $gte: period.startDate, $lte: period.endDate }
+    });
+
+    // Map đếm số buổi có mặt cho từng student theo từng class
+    // studentPresentCount[studentId][classId] = count
+    const studentPresentCount = {};
+    attendanceRecords.forEach(record => {
+      const cid = record.classId.toString();
+      record.students.forEach(s => {
+        const sid = s.studentId.toString();
+        if (s.status === 'present') {
+          if (!studentPresentCount[sid]) studentPresentCount[sid] = {};
+          if (!studentPresentCount[sid][cid]) studentPresentCount[sid][cid] = 0;
+          studentPresentCount[sid][cid]++;
+        }
+      });
+    });
 
     const query = { organizationId: req.organizationId, status: 'active' };
     if (classId) {
@@ -203,20 +261,50 @@ router.post('/generate', requireAdminOrStaff, async (req, res, next) => {
         cid => !classId || cid.toString() === classId
       );
       
-      return studentClasses.map(c => ({
-        organizationId: req.organizationId,
-        studentId: student._id,
-        classId: c,
-        feePeriodId: periodId,
-        amount: customAmount !== undefined && customAmount !== null && customAmount !== ''
+      const studentFees = [];
+      studentClasses.forEach(c => {
+        const classObj = classMap[c.toString()];
+        if (!classObj) return;
+
+        const isSession = classObj.billingType === 'session';
+        const rate = customAmount !== undefined && customAmount !== null && customAmount !== ''
           ? parseInt(customAmount)
-          : (classMap[c.toString()] || 0),
-        finalAmount: customAmount !== undefined && customAmount !== null && customAmount !== ''
-          ? parseInt(customAmount)
-          : (classMap[c.toString()] || 0),
-        status: 'unpaid',
-        dueDate: noDueDate ? null : (period.dueDate || null)
-      }));
+          : (classObj.feeAmount || 0);
+
+        if (isSession) {
+          const presentCount = studentPresentCount[student._id.toString()]?.[c.toString()] || 0;
+          if (presentCount === 0) return; // Không đi học buổi nào thì không tạo học phí
+
+          studentFees.push({
+            organizationId: req.organizationId,
+            studentId: student._id,
+            classId: c,
+            feePeriodId: periodId,
+            billingType: 'session',
+            sessionCount: presentCount,
+            ratePerSession: rate,
+            amount: presentCount * rate,
+            finalAmount: presentCount * rate,
+            description: `Học phí lớp ${classObj.name} - ${period.name} (${presentCount} buổi x ${new Intl.NumberFormat('vi-VN').format(rate)}đ)`,
+            status: 'unpaid',
+            dueDate: noDueDate ? null : (period.dueDate || null)
+          });
+        } else {
+          studentFees.push({
+            organizationId: req.organizationId,
+            studentId: student._id,
+            classId: c,
+            feePeriodId: periodId,
+            billingType: 'monthly',
+            amount: rate,
+            finalAmount: rate,
+            description: `Học phí lớp ${classObj.name} - ${period.name} (Thu theo tháng)`,
+            status: 'unpaid',
+            dueDate: noDueDate ? null : (period.dueDate || null)
+          });
+        }
+      });
+      return studentFees;
     }).flat();
 
     if (feesToCreate.length > 0) {
@@ -370,6 +458,145 @@ router.get('/stats/summary', async (req, res, next) => {
     });
 
     res.json(summary);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /fees/:id/remind - Gửi nhắc nhở đóng học phí thủ công cho 1 học sinh (chỉ admin/staff)
+router.post('/:id/remind', requireAdminOrStaff, async (req, res, next) => {
+  try {
+    const fee = await Fee.findOne({
+      _id: req.params.id,
+      organizationId: req.organizationId
+    })
+      .populate('studentId', 'name parentEmail parentPhone parentName')
+      .populate('feePeriodId', 'name')
+      .populate('classId', 'name');
+
+    if (!fee) {
+      return res.status(404).json({ error: 'Không tìm thấy phiếu học phí' });
+    }
+
+    if (fee.status === 'paid') {
+      return res.status(400).json({ error: 'Học phí này đã được hoàn thành thanh toán' });
+    }
+
+    const organization = await Organization.findById(req.organizationId);
+    const orgName = organization?.name || 'Trung tâm';
+
+    // Tính số ngày quá hạn nếu có dueDate
+    let daysOverdue = 0;
+    if (fee.dueDate && new Date(fee.dueDate) < new Date()) {
+      const diffTime = Math.abs(new Date() - new Date(fee.dueDate));
+      daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    }
+
+    // 1. Gửi thông báo in-app (cho phụ huynh và học sinh)
+    await notificationService.notifyPaymentReminder(fee.studentId._id, fee, daysOverdue);
+
+    // 2. Gửi email cho phụ huynh nếu có thông tin email
+    let emailSent = false;
+    const parentEmail = fee.studentId.parentEmail;
+    if (parentEmail && !parentEmail.endsWith('@smartfee.local')) {
+      const emailResult = await sendFeeReminderEmail(
+        parentEmail,
+        fee.studentId.parentName,
+        fee.studentId.name,
+        fee,
+        daysOverdue,
+        orgName
+      );
+      emailSent = emailResult.success;
+    }
+
+    res.json({
+      success: true,
+      message: emailSent 
+        ? `Đã gửi thông báo nhắc nhở qua ứng dụng và email đến ${parentEmail}`
+        : 'Đã gửi thông báo nhắc nhở qua ứng dụng',
+      emailSent
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /fees/periods/:periodId/remind-all - Gửi nhắc nhở đóng học phí hàng loạt cho toàn bộ học sinh chưa đóng trong kỳ thu (chỉ admin/staff)
+router.post('/periods/:periodId/remind-all', requireAdminOrStaff, async (req, res, next) => {
+  try {
+    const period = await FeePeriod.findOne({
+      _id: req.params.periodId,
+      organizationId: req.organizationId
+    });
+
+    if (!period) {
+      return res.status(404).json({ error: 'Không tìm thấy kỳ thu học phí' });
+    }
+
+    // Tìm tất cả các phiếu học phí chưa hoàn thành thanh toán trong kỳ thu này
+    const unpaidFees = await Fee.find({
+      feePeriodId: period._id,
+      organizationId: req.organizationId,
+      status: { $in: ['unpaid', 'partial', 'overdue'] }
+    })
+      .populate('studentId', 'name parentEmail parentPhone parentName')
+      .populate('classId', 'name')
+      .populate('feePeriodId', 'name');
+
+    if (unpaidFees.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Tất cả học sinh trong kỳ thu này đã hoàn thành đóng học phí',
+        count: 0
+      });
+    }
+
+    const organization = await Organization.findById(req.organizationId);
+    const orgName = organization?.name || 'Trung tâm';
+
+    let notificationCount = 0;
+    let emailCount = 0;
+
+    // Gửi bất đồng bộ/tuần tự cho từng học sinh để tránh nghẽn SMTP
+    for (const fee of unpaidFees) {
+      try {
+        let daysOverdue = 0;
+        if (fee.dueDate && new Date(fee.dueDate) < new Date()) {
+          const diffTime = Math.abs(new Date() - new Date(fee.dueDate));
+          daysOverdue = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+
+        // 1. Gửi thông báo in-app
+        await notificationService.notifyPaymentReminder(fee.studentId._id, fee, daysOverdue);
+        notificationCount++;
+
+        // 2. Gửi email
+        const parentEmail = fee.studentId.parentEmail;
+        if (parentEmail && !parentEmail.endsWith('@smartfee.local')) {
+          const emailResult = await sendFeeReminderEmail(
+            parentEmail,
+            fee.studentId.parentName,
+            fee.studentId.name,
+            fee,
+            daysOverdue,
+            orgName
+          );
+          if (emailResult.success) {
+            emailCount++;
+          }
+        }
+      } catch (err) {
+        console.error(`Lỗi khi nhắc nợ cho phiếu học phí ${fee._id}:`, err.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Đã gửi ${notificationCount} thông báo ứng dụng và ${emailCount} email nhắc nợ`,
+      notificationCount,
+      emailCount
+    });
   } catch (error) {
     next(error);
   }

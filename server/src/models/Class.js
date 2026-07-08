@@ -60,6 +60,11 @@ const classSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
+  billingType: {
+    type: String,
+    enum: ['monthly', 'session'],
+    default: 'monthly'
+  },
   status: {
     type: String,
     enum: ['active', 'inactive'],

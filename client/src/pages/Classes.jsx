@@ -84,7 +84,7 @@ export default function Classes() {
     setStudentSearch('');
     setFormData({
       name: '', code: '', description: '', teacherName: '', schedule: [],
-      maxStudents: 30, feeAmount: 0, startDate: '', endDate: '',
+      maxStudents: 30, feeAmount: 0, billingType: 'monthly', startDate: '', endDate: '',
       studentIds: []
     });
     setErrors({});
@@ -104,6 +104,7 @@ export default function Classes() {
         schedule: cls.schedule || [],
         maxStudents: cls.maxStudents || 30,
         feeAmount: cls.feeAmount || 0,
+        billingType: cls.billingType || 'monthly',
         startDate: cls.startDate ? cls.startDate.split('T')[0] : '',
         endDate: cls.endDate ? cls.endDate.split('T')[0] : '',
         studentIds: (detail.students || []).map(s => s._id)
@@ -117,6 +118,7 @@ export default function Classes() {
         schedule: cls.schedule || [],
         maxStudents: cls.maxStudents || 30,
         feeAmount: cls.feeAmount || 0,
+        billingType: cls.billingType || 'monthly',
         startDate: cls.startDate ? cls.startDate.split('T')[0] : '',
         endDate: cls.endDate ? cls.endDate.split('T')[0] : '',
         studentIds: []
@@ -334,7 +336,7 @@ export default function Classes() {
                       <DollarSign size={14} /> Học phí
                     </span>
                     <span className="font-medium text-primary-600">
-                      {formatCurrency(cls.feeAmount)}/tháng
+                      {formatCurrency(cls.feeAmount)}/{cls.billingType === 'session' ? 'buổi' : 'tháng'}
                     </span>
                   </div>
                 )}
@@ -448,9 +450,24 @@ export default function Classes() {
                   />
                 </div>
 
+                {/* Hình thức thu phí */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Hình thức thu phí</label>
+                  <select
+                    value={formData.billingType}
+                    onChange={(e) => setFormData(f => ({ ...f, billingType: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-primary-500 outline-none"
+                  >
+                    <option value="monthly">Theo tháng</option>
+                    <option value="session">Theo buổi học</option>
+                  </select>
+                </div>
+
                 {/* Học phí */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Học phí (VNĐ/tháng)</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {formData.billingType === 'session' ? 'Học phí mỗi buổi (VNĐ/buổi)' : 'Học phí (VNĐ/tháng)'}
+                  </label>
                   <input
                     type="number"
                     value={formData.feeAmount}

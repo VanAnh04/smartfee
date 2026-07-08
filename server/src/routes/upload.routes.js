@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import fs from 'fs';
 import { auth, requireCanProcessPayments } from '../middleware/auth.js';
 import { uploadReceipt } from '../middleware/upload.js';
 
@@ -10,10 +11,13 @@ const __dirname = dirname(__filename);
 
 const router = express.Router();
 const uploadDir = path.resolve(__dirname, '../../uploads/receipts');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 
 router.use(auth);
 
-router.post('/receipt', requireCanProcessPayments, uploadReceipt, (req, res) => {
+router.post('/receipt', uploadReceipt, (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'Không có file được upload' });
   }

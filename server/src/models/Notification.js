@@ -144,6 +144,12 @@ notificationSchema.index({ organizationId: 1, studentId: 1 });
 notificationSchema.index({ scheduledAt: 1 });
 notificationSchema.index({ createdAt: -1 });
 
+// Map array elements to properties for backward compatibility in services
+NOTIFICATION_TYPES.forEach(type => {
+  const key = type.toUpperCase();
+  NOTIFICATION_TYPES[key] = type;
+});
+
 const Notification = mongoose.model('Notification', notificationSchema);
 
 export { NOTIFICATION_TYPES, NOTIFICATION_CHANNEL, NOTIFICATION_PRIORITY };

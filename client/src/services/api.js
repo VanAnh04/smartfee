@@ -104,6 +104,8 @@ export const feeService = {
   bulkUpdate: (fees) => api.post('/fees/bulk-update', { fees }),
   applyDiscount: (id, data) => api.post(`/fees/${id}/discount`, data),
   getStats: () => api.get('/fees/stats/summary'),
+  sendReminder: (id) => api.post(`/fees/${id}/remind`),
+  sendBulkReminder: (periodId) => api.post(`/fees/periods/${periodId}/remind-all`),
 };
 
 export const paymentService = {
@@ -122,6 +124,9 @@ export const paymentService = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
+  approve: (id) => api.post(`/payments/${id}/approve`),
+  reject: (id) => api.post(`/payments/${id}/reject`),
+  delete: (id) => api.delete(`/payments/${id}`),
   getInvoiceUrl: (paymentId) => `/api/payments/${paymentId}/invoice`,
   walletTopup: (data) => api.post('/payments/wallet/topup', data),
   walletPay: (data) => api.post('/payments/wallet/pay', data),
@@ -178,6 +183,13 @@ export const organizationService = {
   create: (data) => api.post('/admin/organizations', data),
   update: (id, data) => api.put(`/admin/organizations/${id}`, data),
   delete: (id) => api.delete(`/admin/organizations/${id}`),
+};
+
+export const attendanceService = {
+  getHistory: (params) => api.get('/attendance', { params }),
+  getByClassAndDate: (classId, date) => api.get(`/attendance/class/${classId}/date/${date}`),
+  save: (data) => api.post('/attendance', data),
+  getStudentStats: (studentId) => api.get(`/attendance/student/${studentId}/stats`)
 };
 
 export default api;

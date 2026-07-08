@@ -5,7 +5,7 @@ import { formatCurrency } from '../utils/helpers';
 import {
   Search, Plus, CreditCard, DollarSign, ArrowUpRight, ArrowDownRight,
   ChevronLeft, ChevronRight, X, CheckCircle, Clock, XCircle,
-  Receipt, Filter, User, QrCode
+  Receipt, Filter, User, QrCode, Check, Trash2
 } from 'lucide-react';
 
 const METHOD_LABELS = {
@@ -132,6 +132,39 @@ export default function Payments() {
     }
   };
 
+  const handleApprovePayment = async (paymentId) => {
+    if (!window.confirm('Bạn có chắc chắn muốn PHÊ DUYỆT giao dịch này? Số tiền sẽ được cập nhật vào học phí của học sinh.')) return;
+    try {
+      await paymentService.approve(paymentId);
+      toast.success('Phê duyệt giao dịch thành công');
+      fetchPayments();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Không thể phê duyệt giao dịch');
+    }
+  };
+
+  const handleRejectPayment = async (paymentId) => {
+    if (!window.confirm('Bạn có chắc chắn muốn TỪ CHỐI giao dịch này?')) return;
+    try {
+      await paymentService.reject(paymentId);
+      toast.success('Đã từ chối giao dịch');
+      fetchPayments();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Không thể từ chối giao dịch');
+    }
+  };
+
+  const handleDeletePayment = async (paymentId) => {
+    if (!window.confirm('Bạn có chắc chắn muốn XÓA giao dịch này? Nếu giao dịch đã thành công, số tiền đóng học phí của học sinh sẽ bị trừ lại.')) return;
+    try {
+      await paymentService.delete(paymentId);
+      toast.success('Đã xóa giao dịch thành công');
+      fetchPayments();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Không thể xóa giao dịch');
+    }
+  };
+
   const stats = {
     total: payments.filter(p => p.status === 'success').reduce((sum, p) => sum + p.amount, 0),
     count: payments.filter(p => p.status === 'success').length,
@@ -251,7 +284,8 @@ export default function Payments() {
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Phương thức</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Trạng thái</th>
                 <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">Số tiền</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Ngày</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Ngày / Biên lai</th>
+                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -264,11 +298,12 @@ export default function Payments() {
                     <td className="px-4 py-3"><div className="h-10 bg-gray-100 rounded animate-pulse"></div></td>
                     <td className="px-4 py-3"><div className="h-10 bg-gray-100 rounded animate-pulse"></div></td>
                     <td className="px-4 py-3"><div className="h-10 bg-gray-100 rounded animate-pulse"></div></td>
+                    <td className="px-4 py-3"><div className="h-10 bg-gray-100 rounded animate-pulse"></div></td>
                   </tr>
                 ))
               ) : payments.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
+                  <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
                     <CreditCard className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                     <p>Chưa có giao dịch nào</p>
                   </td>
@@ -312,6 +347,48 @@ export default function Payments() {
                       <p className="text-xs text-gray-400">
                         {payment.paidAt ? new Date(payment.paidAt).toLocaleTimeString('vi-VN') : ''}
                       </p>
+                      {payment.receiptUrl && (
+                        <a 
+                          href={payment.receiptUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-xs text-primary-600 hover:underline block mt-1"
+                        >
+                          Xem ảnh biên lai
+                        </a>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        {payment.status === 'pending' && payment.paymentMethod === 'banking' && (
+                          <>
+                            <button
+                              onClick={() => handleApprovePayment(payment._id)}
+                              className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors flex items-center gap-0.5 text-xs font-semibold border border-green-200"
+                              title="Duyệt giao dịch"
+                            >
+                              <Check size={14} />
+                              Duyệt
+                            </button>
+                            <button
+                              onClick={() => handleRejectPayment(payment._id)}
+                              className="p-1 text-amber-600 hover:bg-amber-50 rounded transition-colors flex items-center gap-0.5 text-xs font-semibold border border-amber-200"
+                              title="Từ chối"
+                            >
+                              <X size={14} />
+                              Từ chối
+                            </button>
+                          </>
+                        )}
+                        <button
+                          onClick={() => handleDeletePayment(payment._id)}
+                          className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors flex items-center gap-0.5 text-xs font-semibold border border-red-200"
+                          title="Xóa giao dịch"
+                        >
+                          <Trash2 size={14} />
+                          Xóa
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

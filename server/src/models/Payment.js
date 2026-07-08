@@ -52,6 +52,9 @@ const paymentSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  receiptUrl: {
+    type: String
+  },
   qrData: {
     type: String
   },

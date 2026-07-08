@@ -15,6 +15,7 @@ export default function FamilyFees() {
   const toast = useToast();
   
   const [fees, setFees] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [children, setChildren] = useState([]);
   const [selectedChild, setSelectedChild] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -43,6 +44,17 @@ export default function FamilyFees() {
     };
   }, [pollingInterval]);
 
+  const handleViewInvoice = (feeId) => {
+    const payment = payments.find(p => p.feeId === feeId && p.status === 'success');
+    if (payment) {
+      const token = localStorage.getItem('accessToken');
+      const url = `${paymentService.getInvoiceUrl(payment._id)}?token=${token}`;
+      window.open(url, '_blank');
+    } else {
+      toast.error('Không tìm thấy thông tin giao dịch của học phí này');
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -58,6 +70,7 @@ export default function FamilyFees() {
       
       const feesRes = await authService.getMyFees();
       setFees(feesRes.data.fees || []);
+      setPayments(feesRes.data.payments || []);
       
       if (accountType === 'parent') {
         const childrenRes = await authService.getMyChildren();
@@ -143,6 +156,7 @@ export default function FamilyFees() {
         // Check payment status by re-fetching fees
         const feesRes = await authService.getMyFees();
         setFees(feesRes.data.fees || []);
+        setPayments(feesRes.data.payments || []);
         
         const updatedFee = feesRes.data.fees.find(f => f._id === selectedFee._id);
         if (updatedFee?.status === 'paid') {
@@ -210,7 +224,8 @@ export default function FamilyFees() {
 
   const handleDownloadInvoice = () => {
     if (!lastPaymentId) return;
-    const url = paymentService.getInvoiceUrl(lastPaymentId);
+    const token = localStorage.getItem('accessToken');
+    const url = `${paymentService.getInvoiceUrl(lastPaymentId)}?token=${token}`;
     window.open(url, '_blank');
   };
 
@@ -352,6 +367,9 @@ export default function FamilyFees() {
                           {fee.feePeriodId?.name || 'Học phí'}
                         </p>
                         <p className="text-sm text-gray-500">{fee.classId?.name}</p>
+                        {fee.description && (
+                          <p className="text-xs text-gray-400 mt-0.5">{fee.description}</p>
+                        )}
                       </div>
                     </td>
                     <td className="px-5 py-4">
@@ -399,7 +417,7 @@ export default function FamilyFees() {
                           </button>
                         ) : (
                           <button
-                            onClick={() => toast.info('Đang tải hóa đơn...')}
+                            onClick={() => handleViewInvoice(fee._id)}
                             className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors flex items-center gap-2"
                           >
                             <FileText size={14} />
@@ -538,18 +556,16 @@ export default function FamilyFees() {
                           <p className="font-medium text-green-800">Thanh toán tự động</p>
                         </div>
                         <p className="text-sm text-green-700">
-                          Quét QR hoặc click nút bên dưới để thanh toán qua PayOS
+                          Click nút bên dưới để tiến hành thanh toán qua PayOS
                         </p>
                       </div>
 
                       <div className="bg-gray-50 rounded-xl p-6 flex flex-col items-center">
-                        {qrData.paymentUrl && (
-                          <div className="w-64 h-64 bg-white rounded-lg shadow-sm mb-4 flex items-center justify-center">
-                            <QrCode size={200} className="text-gray-800" />
-                          </div>
-                        )}
-                        <p className="text-xs text-gray-500 mb-4">
+                        <p className="text-sm font-semibold text-gray-800 mb-1">
                           Mã đơn: {qrData.orderCode}
+                        </p>
+                        <p className="text-xs text-gray-500 text-center">
+                          Bạn sẽ được chuyển đến cổng thanh toán an toàn PayOS để hoàn tất giao dịch
                         </p>
                       </div>
 
@@ -565,21 +581,11 @@ export default function FamilyFees() {
                         <p className="text-xs text-gray-500">
                           Hệ thống sẽ tự động cập nhật sau khi thanh toán thành công
                         </p>
-                      </div>
                     </div>
+                  </div>
                   ) : (
                     /* Static QR - Manual */
                     <div className="space-y-4">
-                      {qrData.qrImageUrl && (
-                        <div className="bg-gray-50 rounded-xl p-4 flex flex-col items-center">
-                          <img 
-                            src={qrData.qrImageUrl} 
-                            alt="QR Code" 
-                            className="w-64 h-64 object-contain rounded-lg"
-                          />
-                        </div>
-                      )}
-
                       {qrData.qrConfig && (
                         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
                           <p className="font-medium text-blue-800 flex items-center gap-2">

@@ -24,6 +24,19 @@ const feeSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  billingType: {
+    type: String,
+    enum: ['monthly', 'session'],
+    default: 'monthly'
+  },
+  sessionCount: {
+    type: Number,
+    default: 0
+  },
+  ratePerSession: {
+    type: Number,
+    default: 0
+  },
   amount: {
     type: Number,
     required: true,

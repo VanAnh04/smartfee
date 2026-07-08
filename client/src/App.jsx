@@ -14,6 +14,7 @@ import Notifications from './pages/Notifications';
 import Students from './pages/Students';
 import StudentDetail from './pages/StudentDetail';
 import Classes from './pages/Classes';
+import Attendance from './pages/Attendance';
 import Fees from './pages/Fees';
 import Payments from './pages/Payments';
 import Reports from './pages/Reports';
@@ -98,6 +99,7 @@ function AppRoutes() {
         <Route path="students" element={<Students />} />
         <Route path="students/:id" element={<StudentDetail />} />
         <Route path="classes" element={<Classes />} />
+        <Route path="attendance" element={<Attendance />} />
         <Route path="fees" element={<Fees />} />
         <Route path="payments" element={<Payments />} />
         <Route path="reports" element={<Reports />} />

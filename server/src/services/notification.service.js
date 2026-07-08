@@ -378,7 +378,8 @@ class NotificationService {
   async notifyPaymentReminder(studentId, fee, daysOverdue) {
     const title = daysOverdue > 0 ? 'Nhắc nhở thanh toán quá hạn' : 'Nhắc nhở thanh toán sắp đến hạn';
     const dueDateStr = fee.dueDate ? `Hạn: ${this.formatDate(fee.dueDate)}` : '';
-    const message = `Khoản phí "${fee.description}" ${daysOverdue > 0 ? `đã quá hạn ${daysOverdue} ngày` : 'sắp đến hạn thanh toán'}. Số tiền: ${this.formatCurrency(fee.finalAmount)}. ${dueDateStr}`;
+    const description = fee.description || (fee.classId?.name ? `Học phí lớp ${fee.classId.name}` : (fee.feePeriodId?.name ? `Học phí ${fee.feePeriodId.name}` : 'Học phí'));
+    const message = `Khoản phí "${description}" ${daysOverdue > 0 ? `đã quá hạn ${daysOverdue} ngày` : 'sắp đến hạn thanh toán'}. Số tiền: ${this.formatCurrency(fee.finalAmount)}. ${dueDateStr}`;
 
     await this.createForParent(studentId, title, message, NOTIFICATION_TYPES.PAYMENT_REMINDER, {
       feeId: fee._id,

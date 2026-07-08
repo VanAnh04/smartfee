@@ -387,36 +387,60 @@ router.post('/webhook/vnpay', async (req, res, next) => {
   }
 });
 
-router.post('/confirm-manual', requireCanProcessPayments, async (req, res, next) => {
+router.post('/confirm-manual', async (req, res, next) => {
   try {
     const { studentId, feeId, amount, notes, paymentMethod = 'banking', receiptUrl } = req.body;
+
+    if (req.user.role === 'family') {
+      const isMyChild = req.user.childIds?.some(id => id.toString() === studentId) || req.user.studentId?.toString() === studentId;
+      if (!isMyChild) {
+        return res.status(403).json({ error: 'Bạn không có quyền thực hiện hành động này cho học sinh này' });
+      }
+    } else if (!req.user.canProcessPayments()) {
+      return res.status(403).json({ error: 'Bạn không có quyền thu tiền hoặc ghi nhận thanh toán' });
+    }
 
     const organization = await Organization.findById(req.organizationId);
     const orgName = organization?.name || 'Trung tâm';
 
+    const isFamily = req.user.role === 'family';
     const payment = await Payment.create({
       organizationId: req.organizationId,
       studentId,
       feeId,
       amount: toNumber(amount),
       paymentMethod,
-      status: 'success',
-      paidAt: new Date(),
+      status: isFamily ? 'pending' : 'success',
+      paidAt: isFamily ? null : new Date(),
       receiptUrl: receiptUrl || null,
-      notes: notes || 'Xác nhận thanh toán thủ công'
+      notes: notes || (isFamily ? 'Phụ huynh gửi biên lai chuyển khoản' : 'Xác nhận thanh toán thủ công')
     });
 
-    if (feeId) {
+    if (!isFamily && feeId) {
       await paymentService.applyPaymentToFee(feeId, payment.amount);
     }
 
     const populated = await Payment.findById(payment._id)
       .populate('studentId', 'name studentCode parentName');
 
-    // Thông báo thanh toán thành công
-    notificationService.notifyPaymentSuccess(studentId, populated, orgName).catch(err => {
-      console.error('Lỗi gửi thông báo thanh toán:', err);
-    });
+    if (isFamily) {
+      // Thông báo cho admin là có yêu cầu duyệt thanh toán mới
+      notificationService.createForOrganizationAdmins(
+        req.organizationId,
+        'Yêu cầu duyệt chuyển khoản',
+        `Phụ huynh học sinh ${populated.studentId?.name} đã gửi ảnh biên lai đối soát học phí số tiền ${Number(amount).toLocaleString('vi-VN')}đ.`,
+        'payment',
+        { paymentId: payment._id }
+      ).catch(err => console.error('Lỗi gửi thông báo cho admin:', err));
+    } else {
+      // Thông báo thanh toán thành công cho phụ huynh
+      notificationService.createForParent(
+        studentId,
+        'Thanh toán thành công',
+        `Học phí của học sinh ${populated.studentId?.name} số tiền ${Number(amount).toLocaleString('vi-VN')}đ đã được xác nhận thành công.`,
+        'payment'
+      ).catch(err => console.error('Lỗi gửi thông báo cho phụ huynh:', err));
+    }
 
     res.status(201).json(populated);
   } catch (error) {
@@ -452,6 +476,12 @@ router.get('/:id/invoice', async (req, res, next) => {
           minute: '2-digit'
         })
       : '-';
+
+    let imageSrc = payment.receiptUrl;
+    if (imageSrc && imageSrc.includes('/uploads/')) {
+      const idx = imageSrc.indexOf('/uploads/');
+      imageSrc = imageSrc.substring(idx);
+    }
 
     const invoiceHtml = `
       <!DOCTYPE html>
@@ -545,7 +575,7 @@ router.get('/:id/invoice', async (req, res, next) => {
           ${payment.receiptUrl ? `
           <div class="section">
             <div class="section-title">Biên lai chuyển khoản</div>
-            <img src="${payment.receiptUrl}" style="max-width: 320px; border: 1px solid #E5E7EB; border-radius: 8px;" />
+            <img src="${imageSrc}" style="max-width: 320px; border: 1px solid #E5E7EB; border-radius: 8px;" />
           </div>` : ''}
 
           <div class="footer">
@@ -615,6 +645,131 @@ router.get('/stats/summary', async (req, res, next) => {
     });
 
     res.json(summary);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Phê duyệt giao dịch chuyển khoản thủ công đang chờ duyệt
+router.post('/:id/approve', requireCanProcessPayments, async (req, res, next) => {
+  try {
+    const payment = await Payment.findOne({
+      _id: req.params.id,
+      organizationId: req.organizationId,
+      status: 'pending'
+    });
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Không tìm thấy giao dịch đang chờ duyệt' });
+    }
+
+    payment.status = 'success';
+    payment.paidAt = new Date();
+    payment.confirmedBy = req.user._id;
+    payment.confirmedAt = new Date();
+    await payment.save();
+
+    if (payment.feeId) {
+      await paymentService.applyPaymentToFee(payment.feeId, payment.amount);
+    }
+
+    const populated = await Payment.findById(payment._id)
+      .populate('studentId', 'name studentCode parentName');
+
+    // Thông báo cho cả phụ huynh và học sinh là đã duyệt thành công
+    notificationService.createForParent(
+      payment.studentId,
+      'Thanh toán thành công',
+      `Ảnh biên lai chuyển khoản học phí số tiền ${payment.amount.toLocaleString('vi-VN')}đ đã được xác nhận thành công.`,
+      'payment'
+    ).catch(err => console.error('Lỗi gửi thông báo cho phụ huynh:', err));
+
+    notificationService.createForStudent(
+      payment.studentId,
+      'Thanh toán thành công',
+      `Biên lai chuyển khoản học phí số tiền ${payment.amount.toLocaleString('vi-VN')}đ đã được xác nhận thành công.`,
+      'payment'
+    ).catch(err => console.error('Lỗi gửi thông báo cho học sinh:', err));
+
+    res.json({ message: 'Phê duyệt giao dịch thành công', payment: populated });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Từ chối giao dịch chuyển khoản thủ công
+router.post('/:id/reject', requireCanProcessPayments, async (req, res, next) => {
+  try {
+    const payment = await Payment.findOne({
+      _id: req.params.id,
+      organizationId: req.organizationId,
+      status: 'pending'
+    });
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Không tìm thấy giao dịch đang chờ duyệt' });
+    }
+
+    payment.status = 'failed';
+    payment.confirmedBy = req.user._id;
+    payment.confirmedAt = new Date();
+    await payment.save();
+
+    const populated = await Payment.findById(payment._id)
+      .populate('studentId', 'name studentCode parentName');
+
+    // Thông báo cho cả phụ huynh và học sinh là giao dịch bị từ chối
+    notificationService.createForParent(
+      payment.studentId,
+      'Giao dịch bị từ chối',
+      `Ảnh biên lai chuyển khoản học phí số tiền ${payment.amount.toLocaleString('vi-VN')}đ đã bị từ chối xác nhận. Vui lòng kiểm tra lại.`,
+      'payment'
+    ).catch(err => console.error('Lỗi gửi thông báo cho phụ huynh:', err));
+
+    notificationService.createForStudent(
+      payment.studentId,
+      'Giao dịch bị từ chối',
+      `Biên lai chuyển khoản học phí số tiền ${payment.amount.toLocaleString('vi-VN')}đ đã bị từ chối xác nhận.`,
+      'payment'
+    ).catch(err => console.error('Lỗi gửi thông báo cho học sinh:', err));
+
+    res.json({ message: 'Từ chối giao dịch thành công', payment: populated });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Xóa giao dịch (để admin dọn dẹp các giao dịch ảo/trùng lặp/chưa thanh toán)
+router.delete('/:id', requireCanProcessPayments, async (req, res, next) => {
+  try {
+    const payment = await Payment.findOne({
+      _id: req.params.id,
+      organizationId: req.organizationId
+    });
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Không tìm thấy giao dịch' });
+    }
+
+    // Nếu giao dịch đã thành công, khi xóa cần trừ lại số tiền đã đóng của học phí
+    if (payment.status === 'success' && payment.feeId) {
+      const fee = await Fee.findOne({ _id: payment.feeId, organizationId: req.organizationId });
+      if (fee) {
+        fee.paidAmount = Math.max(0, (fee.paidAmount || 0) - payment.amount);
+        if (fee.paidAmount <= 0) {
+          fee.status = 'unpaid';
+          fee.paidAt = null;
+        } else if (fee.paidAmount < fee.finalAmount) {
+          fee.status = 'partial';
+          fee.paidAt = null;
+        }
+        await fee.save();
+      }
+    }
+
+    await Payment.deleteOne({ _id: payment._id });
+
+    res.json({ message: 'Xóa giao dịch thành công', paymentId: payment._id });
   } catch (error) {
     next(error);
   }

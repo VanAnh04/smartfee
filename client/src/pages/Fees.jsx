@@ -5,7 +5,7 @@ import { formatCurrency } from '../utils/helpers';
 import {
   Search, Plus, Receipt, Calendar, DollarSign, Users,
   CheckCircle, Clock, AlertCircle, Edit, Trash2,
-  ChevronLeft, ChevronRight, X, Filter
+  ChevronLeft, ChevronRight, X, Filter, Bell, Loader2
 } from 'lucide-react';
 
 const STATUS_COLORS = {
@@ -38,6 +38,41 @@ export default function Fees() {
     name: '', periodType: 'month', startDate: '', endDate: '', dueDate: ''
   });
   const [generateForm, setGenerateForm] = useState({ periodId: '', classId: '', customAmount: '', noDueDate: false });
+  const [remindingFees, setRemindingFees] = useState({});
+  const [bulkReminding, setBulkReminding] = useState(false);
+
+  const handleSendReminder = async (id) => {
+    setRemindingFees(prev => ({ ...prev, [id]: true }));
+    try {
+      const res = await feeService.sendReminder(id);
+      toast.success(res.data.message);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Không thể gửi nhắc nhở');
+    } finally {
+      setRemindingFees(prev => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const handleSendBulkReminder = async () => {
+    if (!filters.periodId) {
+      toast.error('Vui lòng chọn một kỳ thu để gửi nhắc nợ hàng loạt');
+      return;
+    }
+    const period = periods.find(p => p._id === filters.periodId);
+    if (!confirm(`Bạn có chắc muốn gửi thông báo và email nhắc nợ đến toàn bộ học sinh chưa hoàn thành đóng học phí trong kỳ thu "${period?.name || ''}"?`)) {
+      return;
+    }
+
+    setBulkReminding(true);
+    try {
+      const res = await feeService.sendBulkReminder(filters.periodId);
+      toast.success(res.data.message);
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Không thể gửi nhắc nhở hàng loạt');
+    } finally {
+      setBulkReminding(false);
+    }
+  };
 
   useEffect(() => {
     fetchPeriods();
@@ -148,6 +183,20 @@ export default function Fees() {
           <p className="text-gray-500 mt-1">Tổng cộng {pagination.total} phiếu thu</p>
         </div>
         <div className="flex gap-2">
+          {filters.periodId && (
+            <button
+              onClick={handleSendBulkReminder}
+              disabled={bulkReminding}
+              className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              {bulkReminding ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Bell size={18} />
+              )}
+              Nhắc nợ kỳ thu
+            </button>
+          )}
           <button
             onClick={() => setShowGenerateModal(true)}
             className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
@@ -291,6 +340,7 @@ export default function Fees() {
                 <th className="px-4 py-3 text-right text-sm font-semibold text-gray-600">Số tiền</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Trạng thái</th>
                 <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600">Hạn thanh toán</th>
+                <th className="px-4 py-3 text-center text-sm font-semibold text-gray-600 w-24">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -303,11 +353,12 @@ export default function Fees() {
                     <td className="px-4 py-3"><div className="h-10 bg-gray-100 rounded animate-pulse"></div></td>
                     <td className="px-4 py-3"><div className="h-10 bg-gray-100 rounded animate-pulse"></div></td>
                     <td className="px-4 py-3"><div className="h-10 bg-gray-100 rounded animate-pulse"></div></td>
+                    <td className="px-4 py-3"><div className="h-10 bg-gray-100 rounded animate-pulse"></div></td>
                   </tr>
                 ))
               ) : fees.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
+                  <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
                     <Receipt className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                     <p>Chưa có phiếu thu học phí nào</p>
                   </td>
@@ -333,6 +384,11 @@ export default function Fees() {
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-sm text-gray-600">{fee.classId?.name || 'N/A'}</p>
+                      {fee.description && (
+                        <p className="text-xs text-gray-400 mt-0.5" title={fee.description}>
+                          {fee.description}
+                        </p>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <p className="font-medium text-gray-900">{formatCurrency(fee.finalAmount)}</p>
@@ -349,6 +405,22 @@ export default function Fees() {
                       <p className="text-sm text-gray-600">
                         {!fee.dueDate ? '—' : new Date(fee.dueDate).toLocaleDateString('vi-VN')}
                       </p>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {fee.status !== 'paid' && (
+                        <button
+                          onClick={() => handleSendReminder(fee._id)}
+                          disabled={remindingFees[fee._id]}
+                          className="p-1 text-amber-600 hover:bg-amber-50 rounded transition-colors disabled:opacity-50 inline-flex items-center justify-center w-8 h-8"
+                          title="Gửi nhắc nợ học phí"
+                        >
+                          {remindingFees[fee._id] ? (
+                            <Loader2 size={16} className="animate-spin text-amber-600" />
+                          ) : (
+                            <Bell size={16} />
+                          )}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))

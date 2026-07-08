@@ -15,7 +15,8 @@ import {
   Bell,
   ChevronDown,
   Search,
-  Lock
+  Lock,
+  CalendarCheck
 } from 'lucide-react';
 import { getInitials } from '../utils/helpers';
 import ChangePasswordModal from './ChangePasswordModal';
@@ -26,6 +27,7 @@ const navItems = [
   { path: '/', icon: LayoutDashboard, label: 'Tổng quan', roles: ['admin', 'staff', 'cashier', 'viewer'] },
   { path: '/students', icon: Users, label: 'Học sinh', roles: ['admin', 'staff'] },
   { path: '/classes', icon: GraduationCap, label: 'Lớp học', roles: ['admin', 'staff'] },
+  { path: '/attendance', icon: CalendarCheck, label: 'Điểm danh', roles: ['admin', 'staff'] },
   { path: '/fees', icon: Receipt, label: 'Học phí', roles: ['admin', 'staff'] },
   { path: '/payments', icon: CreditCard, label: 'Thu chi', roles: ['admin', 'staff', 'cashier'] },
   { path: '/reports', icon: FileText, label: 'Báo cáo', roles: ['admin', 'staff', 'cashier', 'viewer'] },

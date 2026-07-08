@@ -8,7 +8,7 @@ import { dirname, resolve } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const staticPath = resolve(__dirname, 'uploads/receipts');
+const staticPath = resolve(__dirname, '../uploads/receipts');
 
 dotenv.config({ path: resolve(__dirname, '../.env') });
 import mongoose from 'mongoose';
@@ -26,6 +26,7 @@ import webhookRoutes from './routes/webhook.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import uploadRoutes from './routes/upload.routes.js';
 import feedbackRoutes from './routes/feedback.routes.js';
+import attendanceRoutes from './routes/attendance.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
@@ -90,6 +91,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/attendance', attendanceRoutes);
 app.use('/uploads/receipts', express.static(staticPath));
 
 app.get('/api/health', (req, res) => {
