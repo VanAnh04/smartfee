@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://smartfee-api.onrender.com/api/$1" },
-    { "source": "/uploads/(.*)", "destination": "https://smartfee-api.onrender.com/uploads/$1" }
+    { "source": "/api/(.*)", "destination": "https://smartfee.onrender.com/api/$1" },
+    { "source": "/uploads/(.*)", "destination": "https://smartfee.onrender.com/uploads/$1" }
   ]
 }
