@@ -100,7 +100,7 @@ export const sendOTPEmail = async (email, otp) => {
   const mailOptions = {
     from: `"SmartFee" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
     to: email,
-    subject: '🔐 Mã xác thực OTP - SmartFee',
+    subject: 'Mã xác thực OTP - SmartFee',
     html: htmlContent
   };
 
@@ -162,7 +162,7 @@ export const sendWelcomeEmail = async (email, name) => {
     const info = await transporter.sendMail({
       from: `"SmartFee" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
       to: email,
-      subject: '🎉 Chào mừng đến với SmartFee!',
+      subject: 'Chào mừng đến với SmartFee!',
       html: htmlContent
     });
     return { success: true, messageId: info.messageId };
@@ -221,7 +221,7 @@ export const sendPasswordChangedEmail = async (email) => {
     await transporter.sendMail({
       from: `"SmartFee" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
       to: email,
-      subject: '🔐 Mật khẩu đã được thay đổi - SmartFee',
+      subject: 'Mật khẩu đã được thay đổi - SmartFee',
       html: htmlContent
     });
     return { success: true };
@@ -320,9 +320,9 @@ export const sendFeeReminderEmail = async (email, parentName, studentName, feeIn
   `;
 
   const mailOptions = {
-    from: `"${orgName} via SmartFee" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
+    from: `"SmartFee" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
     to: email,
-    subject: daysOverdue > 0 ? `⚠️ [Nhắc nợ học phí] Học phí quá hạn - Học sinh ${studentName}` : `🔔 [Thông báo học phí] Học phí đóng hạn - Học sinh ${studentName}`,
+    subject: daysOverdue > 0 ? `[Nhắc nợ học phí] Học phí quá hạn - Học sinh ${studentName}` : `[Thông báo học phí] Học phí đến hạn - Học sinh ${studentName}`,
     html: htmlContent
   };
 
@@ -424,9 +424,9 @@ export const sendAbsenceEmail = async (email, parentName, studentName, className
   `;
 
   const mailOptions = {
-    from: `"${orgName} via SmartFee" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
+    from: `"SmartFee" <${process.env.EMAIL_FROM || process.env.EMAIL_USER}>`,
     to: email,
-    subject: `🔔 [Thông báo vắng học] Học sinh ${studentName} vắng lớp ${className}`,
+    subject: `[Thông báo vắng học] Học sinh ${studentName} vắng lớp ${className}`,
     html: htmlContent
   };
 
