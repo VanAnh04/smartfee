@@ -1,7 +1,16 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "https://smartfee.onrender.com/api/$1" },
-    { "source": "/uploads/(.*)", "destination": "https://smartfee.onrender.com/uploads/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "https://smartfee-server.vercel.app/api/$1"
+    },
+    {
+      "source": "/uploads/(.*)",
+      "destination": "https://smartfee-server.vercel.app/uploads/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
