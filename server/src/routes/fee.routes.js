@@ -495,25 +495,25 @@ router.post('/:id/remind', requireAdminOrStaff, async (req, res, next) => {
     // 1. Gửi thông báo in-app (cho phụ huynh và học sinh)
     await notificationService.notifyPaymentReminder(fee.studentId._id, fee, daysOverdue);
 
-    // 2. Gửi email cho phụ huynh nếu có thông tin email
+    // 2. Gửi email cho phụ huynh nếu có thông tin email (chạy background tránh nghẽn/timeout)
     let emailSent = false;
     const parentEmail = fee.studentId.parentEmail;
     if (parentEmail && !parentEmail.endsWith('@smartfee.local')) {
-      const emailResult = await sendFeeReminderEmail(
+      sendFeeReminderEmail(
         parentEmail,
         fee.studentId.parentName,
         fee.studentId.name,
         fee,
         daysOverdue,
         orgName
-      );
-      emailSent = emailResult.success;
+      ).catch(err => console.error('❌ Lỗi gửi email nhắc nợ:', err.message));
+      emailSent = true;
     }
 
     res.json({
       success: true,
       message: emailSent 
-        ? `Đã gửi thông báo nhắc nhở qua ứng dụng và email đến ${parentEmail}`
+        ? `Đang gửi thông báo nhắc nhở qua email đến ${parentEmail} và ứng dụng`
         : 'Đã gửi thông báo nhắc nhở qua ứng dụng',
       emailSent
     });
@@ -571,20 +571,18 @@ router.post('/periods/:periodId/remind-all', requireAdminOrStaff, async (req, re
         await notificationService.notifyPaymentReminder(fee.studentId._id, fee, daysOverdue);
         notificationCount++;
 
-        // 2. Gửi email
+        // 2. Gửi email (chạy background tránh nghẽn/timeout)
         const parentEmail = fee.studentId.parentEmail;
         if (parentEmail && !parentEmail.endsWith('@smartfee.local')) {
-          const emailResult = await sendFeeReminderEmail(
+          sendFeeReminderEmail(
             parentEmail,
             fee.studentId.parentName,
             fee.studentId.name,
             fee,
             daysOverdue,
             orgName
-          );
-          if (emailResult.success) {
-            emailCount++;
-          }
+          ).catch(err => console.error(`❌ Lỗi gửi email nhắc nợ hàng loạt cho ${parentEmail}:`, err.message));
+          emailCount++;
         }
       } catch (err) {
         console.error(`Lỗi khi nhắc nợ cho phiếu học phí ${fee._id}:`, err.message);

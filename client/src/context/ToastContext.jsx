@@ -43,7 +43,11 @@ export const ToastProvider = ({ children }) => {
 
   const addToast = useCallback((message, type = 'info', duration = 5000) => {
     const id = Date.now() + Math.random();
-    const toast = { id, message, type };
+    let displayMessage = message;
+    if (typeof message === 'object' && message !== null) {
+      displayMessage = message.message || message.error || JSON.stringify(message);
+    }
+    const toast = { id, message: String(displayMessage), type };
     
     setToasts(prev => [...prev, toast]);
 
