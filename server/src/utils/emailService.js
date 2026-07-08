@@ -338,7 +338,7 @@ export const sendFeeReminderEmail = async (email, parentName, studentName, feeIn
 
 export const sendAbsenceEmail = async (email, parentName, studentName, className, dateString, status, notes, orgName) => {
   const transporter = createTransporter();
-  
+
   const statusLabel = status === 'absent_excused' ? 'Vắng có phép' : 'Vắng không phép';
   const statusBadgeColor = status === 'absent_excused' ? '#f59e0b' : '#ef4444';
   const title = `Thông báo vắng học - Học sinh ${studentName}`;
