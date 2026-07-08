@@ -22,10 +22,7 @@ router.post('/receipt', uploadReceipt, (req, res) => {
     return res.status(400).json({ error: 'Không có file được upload' });
   }
 
-  const protocol = req.protocol;
-  const host = req.get('host');
-  const baseUrl = process.env.BASE_URL || `${protocol}://${host}`;
-  const fileUrl = `${baseUrl}/uploads/receipts/${req.file.filename}`;
+  const fileUrl = `/uploads/receipts/${req.file.filename}`;
 
   res.status(201).json({
     message: 'Upload thành công',

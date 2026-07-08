@@ -29,6 +29,13 @@ const STATUS_LABELS = {
   refunded: 'Đã hoàn tiền'
 };
 
+const getReceiptUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('/')) return url;
+  const match = url.match(/\/uploads\/.+/);
+  return match ? match[0] : url;
+};
+
 export default function Payments() {
   const toast = useToast();
   const [payments, setPayments] = useState([]);
@@ -349,7 +356,7 @@ export default function Payments() {
                       </p>
                       {payment.receiptUrl && (
                         <a 
-                          href={payment.receiptUrl} 
+                          href={getReceiptUrl(payment.receiptUrl)} 
                           target="_blank" 
                           rel="noopener noreferrer" 
                           className="text-xs text-primary-600 hover:underline block mt-1"
