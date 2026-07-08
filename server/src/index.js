@@ -98,6 +98,52 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.get('/api/test-email', async (req, res) => {
+  try {
+    const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
+    const port = parseInt(process.env.EMAIL_PORT) || 587;
+    const secure = port === 465;
+    const user = process.env.EMAIL_USER;
+    const pass = process.env.EMAIL_PASS;
+
+    const transporter = (await import('nodemailer')).default.createTransport({
+      host,
+      port,
+      secure,
+      auth: { user, pass },
+      tls: { rejectUnauthorized: false }
+    });
+
+    console.log('Testing SMTP connection with credentials:', user);
+    await transporter.verify();
+    
+    // Attempt sending a real simple test mail
+    const info = await transporter.sendMail({
+      from: `"SmartFee Test" <${user}>`,
+      to: 'duyhieu391@gmail.com',
+      subject: 'Test email from Render server',
+      text: 'SMTP Verification successfully!'
+    });
+
+    res.json({
+      success: true,
+      message: 'SMTP credentials verified and test email sent!',
+      info
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+      stack: err.stack,
+      env: {
+        user: process.env.EMAIL_USER ? 'SET' : 'NOT_SET',
+        pass: process.env.EMAIL_PASS ? 'SET' : 'NOT_SET',
+        host: process.env.EMAIL_HOST
+      }
+    });
+  }
+});
+
 app.use((req, res) => {
   res.status(404).json({ error: 'API endpoint không tồn tại' });
 });
