@@ -175,7 +175,8 @@ router.post('/qr-code', async (req, res, next) => {
         orderCode,
         description: description || 'Thanh toán học phí',
         buyerName: student.name,
-        buyerPhone: student.parentPhone || ''
+        buyerPhone: student.parentPhone || '',
+        origin: req.headers.origin || req.headers.referer
       });
 
       payment.paymentUrl = paymentLink.paymentUrl;

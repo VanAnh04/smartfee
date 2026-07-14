@@ -56,7 +56,8 @@ class PayOSService {
     cancelUrl,
     buyerName,
     buyerEmail,
-    buyerPhone
+    buyerPhone,
+    origin
   }) {
     let payos;
     
@@ -68,12 +69,24 @@ class PayOSService {
       payos = this.getOrganizationClient(organization);
     }
 
+    let frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5174';
+    if (origin) {
+      try {
+        const parsed = new URL(origin);
+        if (!parsed.hostname.includes('localhost') && !parsed.hostname.includes('127.0.0.1')) {
+          frontendUrl = parsed.origin;
+        }
+      } catch (e) {
+        console.error('Lỗi phân tích origin trong PayOS service:', e);
+      }
+    }
+
     const paymentData = {
       orderCode: Number(orderCode),
       amount: Number(amount),
       description: description || `Thanh toan hoc phi - ${orderCode}`,
-      returnUrl: returnUrl || `${process.env.FRONTEND_URL}/payment/result?orderCode=${orderCode}&type=${type}`,
-      cancelUrl: cancelUrl || `${process.env.FRONTEND_URL}/payment/cancel?orderCode=${orderCode}`,
+      returnUrl: returnUrl || `${frontendUrl}/payment/result?orderCode=${orderCode}&type=${type}`,
+      cancelUrl: cancelUrl || `${frontendUrl}/payment/cancel?orderCode=${orderCode}`,
       buyerName: buyerName || '',
       buyerEmail: buyerEmail || '',
       buyerPhone: buyerPhone || ''

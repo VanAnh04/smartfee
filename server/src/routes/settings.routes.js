@@ -97,7 +97,8 @@ router.post('/upgrade', requireAdmin, async (req, res, next) => {
       description: `SmartFee ${planInfo.name} ${months}th`,
       buyerName: organization.name,
       buyerEmail: organization.email || '',
-      buyerPhone: organization.phone || ''
+      buyerPhone: organization.phone || '',
+      origin: req.headers.origin || req.headers.referer
     });
 
     res.json({
@@ -150,7 +151,8 @@ router.post('/upgrade/payos', requireAdmin, async (req, res, next) => {
       description: `SmartFee ${planInfo.name} ${months}th`,
       buyerName: organization.name,
       buyerEmail: organization.email || '',
-      buyerPhone: organization.phone || ''
+      buyerPhone: organization.phone || '',
+      origin: req.headers.origin || req.headers.referer
     });
 
     res.json({
