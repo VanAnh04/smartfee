@@ -81,12 +81,20 @@ class PayOSService {
       }
     }
 
+    let returnUrlPath = `/payment/result?orderCode=${orderCode}&type=${type}`;
+    let cancelUrlPath = `/payment/cancel?orderCode=${orderCode}`;
+
+    if (type === 'smartfee') {
+      returnUrlPath = `/settings?payment=success&orderCode=${orderCode}`;
+      cancelUrlPath = `/settings?payment=cancelled`;
+    }
+
     const paymentData = {
       orderCode: Number(orderCode),
       amount: Number(amount),
       description: description || `Thanh toan hoc phi - ${orderCode}`,
-      returnUrl: returnUrl || `${frontendUrl}/payment/result?orderCode=${orderCode}&type=${type}`,
-      cancelUrl: cancelUrl || `${frontendUrl}/payment/cancel?orderCode=${orderCode}`,
+      returnUrl: returnUrl || `${frontendUrl}${returnUrlPath}`,
+      cancelUrl: cancelUrl || `${frontendUrl}${cancelUrlPath}`,
       buyerName: buyerName || '',
       buyerEmail: buyerEmail || '',
       buyerPhone: buyerPhone || ''
