@@ -122,6 +122,8 @@ router.post('/', requireCanProcessPayments, async (req, res, next) => {
 
     if (feeId) {
       await paymentService.applyPaymentToFee(feeId, payment.amount);
+    } else {
+      await paymentService.autoApplyPaymentToStudentFees(studentId, payment.amount);
     }
 
     const populated = await Payment.findById(payment._id)
@@ -416,8 +418,12 @@ router.post('/confirm-manual', async (req, res, next) => {
       notes: notes || (isFamily ? 'Phụ huynh gửi biên lai chuyển khoản' : 'Xác nhận thanh toán thủ công')
     });
 
-    if (!isFamily && feeId) {
-      await paymentService.applyPaymentToFee(feeId, payment.amount);
+    if (!isFamily) {
+      if (feeId) {
+        await paymentService.applyPaymentToFee(feeId, payment.amount);
+      } else {
+        await paymentService.autoApplyPaymentToStudentFees(studentId, payment.amount);
+      }
     }
 
     const populated = await Payment.findById(payment._id)
@@ -671,6 +677,8 @@ router.post('/:id/approve', requireCanProcessPayments, async (req, res, next) =>
 
     if (payment.feeId) {
       await paymentService.applyPaymentToFee(payment.feeId, payment.amount);
+    } else {
+      await paymentService.autoApplyPaymentToStudentFees(payment.studentId, payment.amount);
     }
 
     const populated = await Payment.findById(payment._id)
@@ -752,18 +760,22 @@ router.delete('/:id', requireCanProcessPayments, async (req, res, next) => {
     }
 
     // Nếu giao dịch đã thành công, khi xóa cần trừ lại số tiền đã đóng của học phí
-    if (payment.status === 'success' && payment.feeId) {
-      const fee = await Fee.findOne({ _id: payment.feeId, organizationId: req.organizationId });
-      if (fee) {
-        fee.paidAmount = Math.max(0, (fee.paidAmount || 0) - payment.amount);
-        if (fee.paidAmount <= 0) {
-          fee.status = 'unpaid';
-          fee.paidAt = null;
-        } else if (fee.paidAmount < fee.finalAmount) {
-          fee.status = 'partial';
-          fee.paidAt = null;
+    if (payment.status === 'success') {
+      if (payment.feeId) {
+        const fee = await Fee.findOne({ _id: payment.feeId, organizationId: req.organizationId });
+        if (fee) {
+          fee.paidAmount = Math.max(0, (fee.paidAmount || 0) - payment.amount);
+          if (fee.paidAmount <= 0) {
+            fee.status = 'unpaid';
+            fee.paidAt = null;
+          } else if (fee.paidAmount < fee.finalAmount) {
+            fee.status = 'partial';
+            fee.paidAt = null;
+          }
+          await fee.save();
         }
-        await fee.save();
+      } else {
+        await paymentService.revertAutoAppliedPayment(payment.studentId, payment.amount);
       }
     }
 

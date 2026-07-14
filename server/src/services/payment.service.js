@@ -55,6 +55,41 @@ class PaymentService {
     await fee.save();
   }
 
+  async autoApplyPaymentToStudentFees(studentId, amount) {
+    const fees = await Fee.find({
+      studentId,
+      status: { $in: ['unpaid', 'partial', 'overdue'] }
+    }).sort({ dueDate: 1, createdAt: 1 });
+
+    let remainingPayment = amount;
+    for (const fee of fees) {
+      if (remainingPayment <= 0) break;
+      const needed = fee.finalAmount - fee.paidAmount;
+      if (needed <= 0) continue;
+
+      const allocated = Math.min(remainingPayment, needed);
+      fee.paidAmount += allocated;
+      remainingPayment -= allocated;
+      await fee.save();
+    }
+  }
+
+  async revertAutoAppliedPayment(studentId, amount) {
+    const fees = await Fee.find({
+      studentId,
+      paidAmount: { $gt: 0 }
+    }).sort({ dueDate: -1, createdAt: -1 });
+
+    let remainingRevert = amount;
+    for (const fee of fees) {
+      if (remainingRevert <= 0) break;
+      const revertAmount = Math.min(remainingRevert, fee.paidAmount);
+      fee.paidAmount -= revertAmount;
+      remainingRevert -= revertAmount;
+      await fee.save();
+    }
+  }
+
   async getQRConfig(organizationId) {
     let config = await QRConfig.findOne({ organizationId });
 

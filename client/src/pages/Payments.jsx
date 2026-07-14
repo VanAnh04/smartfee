@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { paymentService, studentService } from '../services/api';
+import { paymentService, studentService, feeService } from '../services/api';
 import { useToast } from '../context/ToastContext';
 import { formatCurrency } from '../utils/helpers';
 import {
@@ -49,10 +49,24 @@ export default function Payments() {
   const [showQRModal, setShowQRModal] = useState(false);
   const [qrData, setQrData] = useState(null);
   const [formData, setFormData] = useState({
-    studentId: '', amount: '', paymentMethod: 'cash', notes: ''
+    studentId: '', feeId: '', amount: '', paymentMethod: 'cash', notes: ''
   });
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [studentSearchInput, setStudentSearchInput] = useState('');
+  const [unpaidFees, setUnpaidFees] = useState([]);
+  const [studentDebt, setStudentDebt] = useState(0);
+  const [loadingFees, setLoadingFees] = useState(false);
+
+  useEffect(() => {
+    if (!showPaymentModal) {
+      setStudentSearchInput('');
+      setSearchResults([]);
+      setUnpaidFees([]);
+      setStudentDebt(0);
+      setFormData({ studentId: '', feeId: '', amount: '', paymentMethod: 'cash', notes: '' });
+    }
+  }, [showPaymentModal]);
 
   useEffect(() => {
     fetchPayments();
@@ -103,6 +117,29 @@ export default function Payments() {
     }
   };
 
+  const fetchStudentUnpaidFees = async (studentId) => {
+    setLoadingFees(true);
+    try {
+      const res = await feeService.getAll({ studentId, limit: 100 });
+      const unpaid = res.data.fees.filter(f => f.status !== 'paid');
+      setUnpaidFees(unpaid);
+      
+      const total = unpaid.reduce((sum, f) => sum + (f.finalAmount - (f.paidAmount || 0)), 0);
+      setStudentDebt(total);
+      
+      setFormData(f => ({ 
+        ...f, 
+        amount: total > 0 ? total.toString() : '0',
+        feeId: ''
+      }));
+    } catch (error) {
+      console.error('Error fetching student fees:', error);
+      toast.error('Không thể tải dư nợ của học sinh');
+    } finally {
+      setLoadingFees(false);
+    }
+  };
+
   const handleFilterChange = (key, value) => {
     setFilters(f => ({ ...f, [key]: value }));
     setPagination(p => ({ ...p, page: 1 }));
@@ -114,7 +151,7 @@ export default function Payments() {
       await paymentService.create(formData);
       toast.success('Thu tiền thành công');
       setShowPaymentModal(false);
-      setFormData({ studentId: '', amount: '', paymentMethod: 'cash', notes: '' });
+      setFormData({ studentId: '', feeId: '', amount: '', paymentMethod: 'cash', notes: '' });
       fetchPayments();
     } catch (error) {
       toast.error(error.response?.data?.error || 'Có lỗi xảy ra');
@@ -446,9 +483,11 @@ export default function Payments() {
                   <input
                     type="text"
                     placeholder="Tìm học sinh..."
-                    value={formData.studentId ? students.find(s => s._id === formData.studentId)?.name || '' : ''}
+                    value={studentSearchInput}
                     onChange={(e) => {
-                      handleSearchStudent(e.target.value);
+                      const val = e.target.value;
+                      setStudentSearchInput(val);
+                      handleSearchStudent(val);
                       setFormData(f => ({ ...f, studentId: '' }));
                     }}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-primary-500 outline-none"
@@ -461,7 +500,12 @@ export default function Payments() {
                           type="button"
                           onClick={() => {
                             setFormData(f => ({ ...f, studentId: s._id }));
+                            setStudentSearchInput(s.name);
+                            if (!students.some(item => item._id === s._id)) {
+                              setStudents(prev => [...prev, s]);
+                            }
                             setSearchResults([]);
+                            fetchStudentUnpaidFees(s._id);
                           }}
                           className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center gap-2"
                         >
@@ -474,9 +518,54 @@ export default function Payments() {
                   )}
                 </div>
                 {formData.studentId && (
-                  <p className="text-sm text-green-600 mt-1">
-                    ✓ Đã chọn: {students.find(s => s._id === formData.studentId)?.name}
-                  </p>
+                  <div className="mt-2 space-y-2 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Học sinh:</span>
+                      <span className="font-semibold text-gray-900">
+                        {students.find(s => s._id === formData.studentId)?.name || studentSearchInput}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-500">Tổng nợ hiện tại:</span>
+                      <span className="font-semibold text-red-600">
+                        {formatCurrency(studentDebt)}
+                      </span>
+                    </div>
+
+                    {loadingFees ? (
+                      <p className="text-xs text-gray-400 animate-pulse">Đang tải thông tin nợ...</p>
+                    ) : unpaidFees.length > 0 ? (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Áp dụng gạch nợ cho khoản thu</label>
+                        <select
+                          value={formData.feeId || ''}
+                          onChange={(e) => {
+                            const selectedFeeId = e.target.value;
+                            if (selectedFeeId === '') {
+                              setFormData(f => ({ ...f, feeId: '', amount: studentDebt.toString() }));
+                            } else {
+                              const selected = unpaidFees.find(f => f._id === selectedFeeId);
+                              const remaining = selected ? (selected.finalAmount - (selected.paidAmount || 0)) : 0;
+                              setFormData(f => ({ ...f, feeId: selectedFeeId, amount: remaining.toString() }));
+                            }
+                          }}
+                          className="w-full px-2 py-1.5 text-xs bg-white border border-gray-200 rounded focus:ring-1 focus:ring-primary-500 outline-none"
+                        >
+                          <option value="">Tất cả nợ / Nộp chung ({formatCurrency(studentDebt)})</option>
+                          {unpaidFees.map(f => {
+                            const remaining = f.finalAmount - (f.paidAmount || 0);
+                            return (
+                              <option key={f._id} value={f._id}>
+                                {f.feePeriodId?.name || f.description || 'Kỳ học'} (Còn nợ: {formatCurrency(remaining)})
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-green-600 font-medium">✓ Học sinh này không có nợ học phí</p>
+                    )}
+                  </div>
                 )}
               </div>
               <div>
